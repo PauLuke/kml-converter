@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversor de KML</title>
+
+<style>
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    max-width:700px;
+    margin:40px auto;
+    padding:20px;
+    background:#f6e7db;
+}
+
+h1{
+  color: #78481e;
+    margin-top:0;
+    text-align: center;
+}
+
+.container{
+    display: flex;
+    flex-direction: column; /* Stack items vertically */
+    align-items: center;    /* Center horizontally */
+    justify-content: center;/* Center vertically (if container has height) */
+    gap: 1rem;              /* Space between elements */
+    background:#fefcfa;
+    padding:25px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);
+}
+
+button{
+  outline: none;
+  color: #885222;
+  padding: 1em;
+  padding-left: 3em;
+  padding-right: 3em;
+  border: 2px dashed #DAA06D;
+  border-radius: 15px;
+  background-color: #EADDCA;
+  box-shadow: 0 0 0 4px #EADDCA, 2px 2px 4px 2px rgba(0, 0, 0, 0.5);
+  transition: .1s ease-in-out, .4s color;
+}
+
+input[type=file] {
+  width: 350px;
+  max-width: 100%;
+  color: #444;
+  padding: 5px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #EADDCA;
+}
+
+input[type=file]::file-selector-button {
+  margin-right: 20px;
+  border: none;
+  background: #EADDCA;
+  padding: 10px 20px;
+  border-radius: 15px;
+  color: #885222;
+  cursor: pointer;
+  transition: background .2s ease-in-out;
+}
+
+input[type=file]::file-selector-button:hover {
+  background: #0d45a5;
+}
+
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>Conversor de KML</h1>
+
+<input type="file" id="fileInput" accept=".kml">
+
+<button id="convertBtn">Converter</button>
+</div>
+
+<script>
+const COLORS = {
+    "grn-pushpin.png": "ff3ad800",
+    "blue-pushpin.png": "ffff901e",
+    "red-pushpin.png": "ff0000ff",
+    "ylw-pushpin.png": "ff00ffff",
+    "wht-pushpin.png": "ffc8e4e4"
+};
+
+const KML_NS = "http://www.opengis.net/kml/2.2";
+
+document.getElementById("convertBtn").addEventListener("click", async () => {
+
+    const input = document.getElementById("fileInput");
+
+    if (!input.files.length) {
+        alert("Please choose a KML file.");
+        return;
+    }
+
+    const text = await input.files[0].text();
+
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, "application/xml");
+
+    const parserError = xml.querySelector("parsererror");
+    if (parserError) {
+        alert("Invalid KML file.");
+        return;
+    }
+
+    const iconStyles = xml.getElementsByTagNameNS(KML_NS, "IconStyle");
+
+    let modified = 0;
+
+    for (const iconStyle of iconStyles) {
+
+        const icon = iconStyle.getElementsByTagNameNS(KML_NS, "Icon")[0];
+        if (!icon) continue;
+
+        const href = icon.getElementsByTagNameNS(KML_NS, "href")[0];
+        if (!href || !href.textContent) continue;
+
+        const hrefText = href.textContent;
+
+        for (const [iconName, color] of Object.entries(COLORS)) {
+
+            if (hrefText.endsWith(iconName)) {
+
+                // Remove Icon element
+                icon.remove();
+
+                // Find existing color element
+                let colorElem = iconStyle.getElementsByTagNameNS(KML_NS, "color")[0];
+
+                if (!colorElem) {
+                    colorElem = xml.createElementNS(KML_NS, "color");
+
+                    if (iconStyle.firstChild) {
+                        iconStyle.insertBefore(colorElem, iconStyle.firstChild);
+                    } else {
+                        iconStyle.appendChild(colorElem);
+                    }
+                }
+
+                colorElem.textContent = color;
+
+                modified++;
+                break;
+            }
+        }
+    }
+
+    const serializer = new XMLSerializer();
+    const output =
+        '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        serializer.serializeToString(xml);
+
+    const blob = new Blob([output], {
+        type: "application/vnd.google-earth.kml+xml"
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    // Nome original do arquivo
+    const originalName = input.files[0].name;
+
+    // Remove a extensão .kml (ou qualquer outra extensão)
+    const baseName = originalName.replace(/\.[^/.]+$/, "");
+
+    // Nome do arquivo de saída
+    const outputName = `${baseName}_mod.kml`;
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = outputName;
+    a.click();
+
+    URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>
